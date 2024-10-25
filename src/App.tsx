@@ -88,24 +88,28 @@ const App: React.FC = () => {
     setFileData(prevData => prevData.filter(item => item.id !== id));
   };
 
-  const handleMoveUp = (index: number) => {
-    if (index > 0) {
-      setFileData(prevData => {
+  const handleMoveUp = (id: number) => {
+    setFileData(prevData => {
+      const index = prevData.findIndex(item => item.id === id);
+      if (index > 0) {
         const newData = [...prevData];
         [newData[index - 1], newData[index]] = [newData[index], newData[index - 1]];
         return newData;
-      });
-    }
+      }
+      return prevData;
+    });
   };
 
-  const handleMoveDown = (index: number) => {
-    if (index < fileData.length - 1) {
-      setFileData(prevData => {
+  const handleMoveDown = (id: number) => {
+    setFileData(prevData => {
+      const index = prevData.findIndex(item => item.id === id);
+      if (index < prevData.length - 1) {
         const newData = [...prevData];
         [newData[index], newData[index + 1]] = [newData[index + 1], newData[index]];
         return newData;
-      });
-    }
+      }
+      return prevData;
+    });
   };
 
   const mergePDFs = async () => {
@@ -248,10 +252,10 @@ const App: React.FC = () => {
                 header: 'Actions',
                 field: 'id',
                 width: 150,
-                renderCell: (row, index) => (
+                renderCell: (row) => (
                   <Box display="flex" justifyContent="space-between">
-                    <IconButton icon={ChevronUpIcon} aria-label="Move Up" onClick={() => handleMoveUp(index)} disabled={index === 0} />
-                    <IconButton icon={ChevronDownIcon} aria-label="Move Down" onClick={() => handleMoveDown(index)} disabled={index === fileData.length - 1} />
+                    <IconButton icon={ChevronUpIcon} aria-label="Move Up" onClick={() => handleMoveUp(row.id)} />
+                    <IconButton icon={ChevronDownIcon} aria-label="Move Down" onClick={() => handleMoveDown(row.id)} />
                     <IconButton icon={TrashIcon} aria-label="Delete" onClick={() => handleDelete(row.id)} />
                   </Box>
                 ),
