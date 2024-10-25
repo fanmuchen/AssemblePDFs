@@ -3,12 +3,47 @@ import { PDFDocument } from 'pdf-lib';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
+import styled from 'styled-components';
+import {
+  Box,
+  Heading,
+  Text,
+  FormControl,
+  Select,
+  TextInput,
+  Button,
+  Spinner,
+} from '@primer/react';
+
+const StyledBox = styled(Box)`
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+`;
+
+const FileInput = styled.input`
+  display: none;
+`;
+
+const FileLabel = styled.label`
+  display: inline-block;
+  padding: 8px 12px;
+  cursor: pointer;
+  background-color: #0366d6;
+  color: white;
+  border-radius: 6px;
+  font-size: 14px;
+  &:hover {
+    background-color: #0255b3;
+  }
+`;
 
 const App: React.FC = () => {
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [docxTemplate, setDocxTemplate] = useState<File | null>(null);
   const [pageNumberPosition, setPageNumberPosition] = useState<'left' | 'right' | 'outside' | 'inside'>('right');
   const [catalogEntries, setCatalogEntries] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handlePdfUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -101,6 +136,7 @@ const App: React.FC = () => {
   };
 
   const handleSubmit = async () => {
+    setIsLoading(true);
     try {
       const mergedPdf = await mergePDFs();
       const catalog = await generateCatalog();
@@ -125,45 +161,66 @@ const App: React.FC = () => {
       const pdfBytes = await finalPdf.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       saveAs(blob, 'merged_document_with_catalog.pdf');
+      setIsLoading(false);
     } catch (error) {
       console.error('Error generating document:', error);
       alert('An error occurred while generating the document. Please try again.');
+      setIsLoading(false);
     }
   };
 
   return (
-    <div>
-      <h1>PDF Merger and Catalog Generator</h1>
-      <div>
-        <h2>Upload PDFs</h2>
-        <input type="file" multiple accept=".pdf" onChange={handlePdfUpload} />
-      </div>
-      <div>
-        <h2>Upload DOCX Template</h2>
-        <input type="file" accept=".docx" onChange={handleDocxUpload} />
-      </div>
-      <div>
-        <h2>Page Number Position</h2>
-        <select value={pageNumberPosition} onChange={(e) => setPageNumberPosition(e.target.value as any)}>
-          <option value="left">Left</option>
-          <option value="right">Right</option>
-          <option value="outside">Outside</option>
-          <option value="inside">Inside</option>
-        </select>
-      </div>
-      <div>
-        <h2>Catalog Entries</h2>
+    <StyledBox>
+      <Heading mb={4}>PDF Merger and Catalog Generator</Heading>
+
+      <Box mb={4}>
+        <Text fontWeight="bold" mb={2}>Upload PDFs</Text>
+        <FileLabel>
+          Choose PDF Files
+          <FileInput type="file" multiple accept=".pdf" onChange={handlePdfUpload} />
+        </FileLabel>
+        {pdfFiles.length > 0 && (
+          <Text mt={2}>{pdfFiles.length} file(s) selected</Text>
+        )}
+      </Box>
+
+      <Box mb={4}>
+        <Text fontWeight="bold" mb={2}>Upload DOCX Template</Text>
+        <FileLabel>
+          Choose DOCX Template
+          <FileInput type="file" accept=".docx" onChange={handleDocxUpload} />
+        </FileLabel>
+        {docxTemplate && (
+          <Text mt={2}>{docxTemplate.name} selected</Text>
+        )}
+      </Box>
+
+      <FormControl mb={4}>
+        <FormControl.Label>Page Number Position</FormControl.Label>
+        <Select value={pageNumberPosition} onChange={(e) => setPageNumberPosition(e.target.value as any)}>
+          <Select.Option value="left">Left</Select.Option>
+          <Select.Option value="right">Right</Select.Option>
+          <Select.Option value="outside">Outside</Select.Option>
+          <Select.Option value="inside">Inside</Select.Option>
+        </Select>
+      </FormControl>
+
+      <Box mb={4}>
+        <Text fontWeight="bold" mb={2}>Catalog Entries</Text>
         {catalogEntries.map((entry, index) => (
-          <input
+          <TextInput
             key={index}
-            type="text"
             value={entry}
             onChange={(e) => handleCatalogEntryChange(index, e.target.value)}
+            mb={2}
           />
         ))}
-      </div>
-      <button onClick={handleSubmit}>Generate and Download</button>
-    </div>
+      </Box>
+
+      <Button onClick={handleSubmit} disabled={isLoading}>
+        {isLoading ? <Spinner size="small" /> : 'Generate and Download'}
+      </Button>
+    </StyledBox>
   );
 };
 
