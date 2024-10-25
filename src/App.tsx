@@ -1,45 +1,14 @@
 import React, { useState } from 'react';
+import { Button, Upload, Table, Input, Select, Checkbox, Spin, Typography, Space, Row, Col } from 'antd';
+import { UploadProps } from 'antd';
+import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { PDFDocument, rgb } from 'pdf-lib';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
-import styled from 'styled-components';
-import {
-  Box,
-  Heading,
-  Text,
-  FormControl,
-  Select,
-  TextInput,
-  Button,
-  Spinner,
-  IconButton,
-} from '@primer/react';
-import { DataTable } from '@primer/react/experimental';
-import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@primer/octicons-react';
 
-const StyledBox = styled(Box)`
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 2rem;
-`;
-
-const FileInput = styled.input`
-  display: none;
-`;
-
-const FileLabel = styled.label`
-  display: inline-block;
-  padding: 8px 12px;
-  cursor: pointer;
-  background-color: #0366d6;
-  color: white;
-  border-radius: 6px;
-  font-size: 14px;
-  &:hover {
-    background-color: #0255b3;
-  }
-`;
+const { Option } = Select;
+const { Title, Text } = Typography;
 
 interface FileData {
   id: number;
@@ -58,37 +27,31 @@ const App: React.FC = () => {
   const [templateBuffer, setTemplateBuffer] = useState<ArrayBuffer | null>(null);
   const [tocTitle, setTocTitle] = useState('Table of Contents');
 
-  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      const files = Array.from(event.target.files);
-      const newFileData = await Promise.all(files.map(async (file, index) => {
-        const pdfDoc = await PDFDocument.load(await file.arrayBuffer());
-        return {
-          id: Date.now() + index,
-          file,
-          title: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
-          pageCount: pdfDoc.getPageCount(),
-        };
-      }));
-      setFileData(prevData => [...prevData, ...newFileData]);
-    }
+  const handlePdfUpload: UploadProps['onChange'] = async ({ file }) => {
+    if (file.status !== 'done') return;
+    const { originFileObj } = file;
+    const arrayBuffer = await originFileObj!.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    setFileData((prevData) => [
+      ...prevData,
+      {
+        id: Date.now(),
+        file: originFileObj!,
+        title: originFileObj!.name.replace(/\.[^/.]+$/, ""), // Remove file extension
+        pageCount: pdfDoc.getPageCount(),
+      },
+    ]);
   };
 
-  const handleDocxUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files ? event.target.files[0] : null;
-    if (file?.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-      setDocxTemplate(file);
-
-      // Added code to set templateBuffer
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        setTemplateBuffer(e.target?.result as ArrayBuffer);
-      };
-      reader.readAsArrayBuffer(file);
-
-    } else {
-      alert("Please upload a valid DOCX file.");
-    }
+  const handleDocxUpload: UploadProps['onChange'] = async ({ file }) => {
+    if (file.status !== 'done') return;
+    const { originFileObj } = file;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      setTemplateBuffer(e.target?.result as ArrayBuffer);
+    };
+    reader.readAsArrayBuffer(originFileObj!);
+    setDocxTemplate(originFileObj!);
   };
 
   const handleTitleChange = (id: number, value: string) => {
@@ -226,17 +189,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleTemplateUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        setTemplateBuffer(e.target?.result as ArrayBuffer);
-      };
-      reader.readAsArrayBuffer(file);
-    }
-  };
-
   const handleGenerateContentPage = async () => {
     if(!templateBuffer) {
       alert('Template buffer not loaded. Please upload a valid DOCX file.');
@@ -281,138 +233,69 @@ const App: React.FC = () => {
   };
 
   return (
-    <StyledBox>
-      <Heading mb={4}>PDF 合并与目录生成器</Heading> {/* PDF Merger and Catalog Generator */}
+    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
+      <Title level={2} style={{ textAlign: 'center', marginBottom: '2rem' }}>PDF Merger and Catalog Generator</Title>
+      
+      <Space direction="vertical" style={{ width: '100%' }} size="large">
+        <Upload accept='.pdf' onChange={handlePdfUpload} multiple>
+          <Button icon={<UploadOutlined />}>Upload PDFs</Button>
+        </Upload>
+        {fileData.length > 0 && <Text type="secondary">{fileData.length} file(s) selected</Text>}
 
-      <Box mb={4}>
-        <Text fontWeight="bold" mb={2}>
-          上传 PDFs <span style={{ color: 'red' }}>*</span> {/* Upload PDFs */}
-        </Text>
-        <FileLabel>
-          选择 PDF 文件 {/* Choose PDF Files */}
-          <FileInput type="file" multiple accept=".pdf" onChange={handlePdfUpload} />
-        </FileLabel>
-        {fileData.length > 0 && (
-          <Text mt={2}>{fileData.length} 个文件已选择</Text> // 确保注释没有多余的符号 {file(s) selected}
+        <Upload accept=".docx" onChange={handleDocxUpload} style={{ marginBottom: '1rem' }}>
+          <Button icon={<UploadOutlined />}>Upload DOCX Template</Button>
+        </Upload>
+        {docxTemplate && <Text type="secondary">Template selected: {docxTemplate.name}</Text>}
+
+        <Table
+          dataSource={fileData}
+          pagination={false}
+          rowKey="id"
+          columns={[
+            { title: 'Title', dataIndex: 'title', render: (text: string, record: FileData) => <Input value={text} onChange={(e) => handleTitleChange(record.id, e.target.value)} /> },
+            { title: 'Pages', dataIndex: 'pageCount' },
+            { title: 'Actions', render: (_, record: FileData) => (
+              <Space>
+                <Button icon={<ArrowUpOutlined />} onClick={() => handleMoveUp(record.id)} />
+                <Button icon={<ArrowDownOutlined />} onClick={() => handleMoveDown(record.id)} />
+                <Button icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
+              </Space>
+            ) }
+          ]}
+        />
+
+        <Row gutter={[16, 16]}>
+          <Col span={12}>
+            <Select value={pageNumberPosition} onChange={(value) => setPageNumberPosition(value as any)} style={{ width: '100%' }}>
+              <Option value="none">No page number</Option>
+              <Option value="left">Left</Option>
+              <Option value="right">Right</Option>
+              <Option value="outside">Outside</Option>
+              <Option value="inside">Inside</Option>
+            </Select>
+          </Col>
+          <Col span={12}>
+            <Checkbox checked={insertEmptyPages} onChange={(e) => setInsertEmptyPages(e.target.checked)}>Insert empty page after odd page count PDFs</Checkbox>
+          </Col>
+        </Row>
+
+        <Checkbox checked={needContentPage} onChange={(e) => setNeedContentPage(e.target.checked)}>Generate content page</Checkbox>
+
+        {needContentPage && (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Button onClick={handleGenerateContentPage}>Generate Content Page DOCX</Button>
+            <Input value={tocTitle} onChange={handleTocTitleChange} placeholder="Custom Table of Contents Title" />
+            <Upload accept=".pdf" onChange={handlePdfUpload}>
+              <Button icon={<UploadOutlined />}>Choose Converted Content Page PDF</Button>
+            </Upload>
+          </Space>
         )}
-      </Box>
 
-      <Box mb={4}>
-        <Text fontWeight="bold" mb={2}>
-          上传 DOCX 模板 {/* Upload DOCX Template */}
-        </Text>
-        <FileLabel>
-          选择 DOCX 文件 {/* Choose DOCX File */}
-          <FileInput type="file" accept=".docx" onChange={handleDocxUpload} />
-        </FileLabel>
-        {docxTemplate && (
-          <Text mt={2}>模板已选择: {docxTemplate.name}</Text> // Display message when template is chosen
-        )}
-      </Box>
-
-      {fileData.length > 0 && (
-        <Box mb={4}>
-          <DataTable
-            aria-labelledby="uploaded-files"
-            data={fileData}
-            columns={[
-              {
-                header: '标题', // 标题 represents "Title"
-                field: 'title',
-                width: 'grow',
-                renderCell: (row) => (
-                  <TextInput
-                    value={row.title}
-                    onChange={(e) => handleTitleChange(row.id, e.target.value)}
-                  />
-                ),
-              },
-              {
-                header: '页数', // Pages
-                field: 'pageCount',
-                width: 100,
-              },
-              {
-                header: '动作', // Actions
-                field: 'id',
-                width: 150,
-                renderCell: (row) => (
-                  <Box display="flex" justifyContent="space-between">
-                    <IconButton icon={ChevronUpIcon} aria-label="上移" onClick={() => handleMoveUp(row.id)} /> {/* Move Up */}
-                    <IconButton icon={ChevronDownIcon} aria-label="下移" onClick={() => handleMoveDown(row.id)} /> {/* Move Down */}
-                    <IconButton icon={TrashIcon} aria-label="删除" onClick={() => handleDelete(row.id)} /> {/* Delete */}
-                  </Box>
-                ),
-              },
-            ]}
-          />
-        </Box>
-      )}
-
-      <FormControl mb={4}>
-        <FormControl.Label>页码位置</FormControl.Label> {/* Page Number Position */}
-        <Select value={pageNumberPosition} onChange={(e) => setPageNumberPosition(e.target.value as any)}>
-          <Select.Option value="none">无页码</Select.Option> {/* No page number - 6. Move to first option */}
-          <Select.Option value="left">左侧</Select.Option> {/* Left */}
-          <Select.Option value="right">右侧</Select.Option> {/* Right */}
-          <Select.Option value="outside">外侧</Select.Option> {/* Outside */}
-          <Select.Option value="inside">内侧</Select.Option> {/* Inside */}
-        </Select>
-      </FormControl>
-
-      <FormControl mb={4}>
-        <FormControl.Label>
-          <input
-            type="checkbox"
-            checked={needContentPage}
-            onChange={(e) => setNeedContentPage(e.target.checked)}
-          />
-          {' '}生成目录页 {/* Generate content page */}
-        </FormControl.Label>
-      </FormControl>
-
-      {needContentPage && (
-        <>
-          <Button onClick={handleGenerateContentPage}>
-            生成目录页 DOCX {/* Generate Content Page DOCX */}
-          </Button>
-
-          <Box mt={4} mb={4}>
-            <Text fontWeight="bold" mb={2}>
-              将下载的目录页 DOCX 转换为 PDF 后，在此处上传 PDF：{/* Instructions: How to handle content page */}
-            </Text>
-            <FileLabel>
-              选择转换后的目录页 PDF {/* Choose Converted Content Page PDF */}
-              <FileInput type="file" accept=".pdf" onChange={handlePdfUpload} />
-            </FileLabel>
-          </Box>
-        </>
-      )}
-
-      <FormControl mb={4}>
-        <FormControl.Label>
-          <input
-            type="checkbox"
-            checked={insertEmptyPages}
-            onChange={(e) => setInsertEmptyPages(e.target.checked)}
-          />
-          {' '}在页数为奇数的 PDF 后插入空白页 {/* Insert empty page after PDFs with odd page numbers */}
-        </FormControl.Label>
-      </FormControl>
-
-      {fileData.length > 0 && (
-        <FormControl mb={4}>
-          <FormControl.Label>
-            自定义目录标题 {/* Custom Table of Contents Title */}
-          </FormControl.Label>
-          <TextInput value={tocTitle} onChange={handleTocTitleChange} />
-        </FormControl>
-      )}
-
-      <Button onClick={handleSubmit} disabled={isLoading}>
-        {isLoading ? <Spinner size="small" /> : '生成并下载最终 PDF'} {/* Generate and Download Final PDF */}
-      </Button>
-    </StyledBox>
+        <Button onClick={handleSubmit} disabled={isLoading} type="primary" block>
+          {isLoading ? <Spin size="small" /> : 'Generate and Download Final PDF'}
+        </Button>
+      </Space>
+    </div>
   );
 };
 

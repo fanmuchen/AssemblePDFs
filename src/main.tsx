@@ -1,13 +1,11 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { ThemeProvider } from '@primer/react'
-import './index.css'
-import App from './App'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import 'antd/dist/reset.css'; // Import Ant Design's global reset stylesheet
+import './index.css';
+import App from './App';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
+    <App />
   </React.StrictMode>,
-)
+);
