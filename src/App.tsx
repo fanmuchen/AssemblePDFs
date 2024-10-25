@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { Button, Upload, Table, Input, Select, Checkbox, Spin, Typography, Space, Row, Col } from 'antd';
-import { UploadProps } from 'antd';
-import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { PDFDocument, rgb } from 'pdf-lib';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
+import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, ConfigProvider } from 'antd';
+import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
+const { Content } = Layout;
 const { Option } = Select;
-const { Title, Text } = Typography;
 
 interface FileData {
   id: number;
@@ -16,6 +15,8 @@ interface FileData {
   title: string;
   pageCount: number;
 }
+
+let uniqueIdCounter = 0; // initialize a counter at a module level
 
 const App: React.FC = () => {
   const [fileData, setFileData] = useState<FileData[]>([]);
@@ -27,31 +28,31 @@ const App: React.FC = () => {
   const [templateBuffer, setTemplateBuffer] = useState<ArrayBuffer | null>(null);
   const [tocTitle, setTocTitle] = useState('Table of Contents');
 
-  const handlePdfUpload: UploadProps['onChange'] = async ({ file }) => {
-    if (file.status !== 'done') return;
-    const { originFileObj } = file;
-    const arrayBuffer = await originFileObj!.arrayBuffer();
+  const handlePdfUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    const file = files[0]; // We assume handling one file for simplicity.
+    const arrayBuffer = await file.arrayBuffer();
     const pdfDoc = await PDFDocument.load(arrayBuffer);
+
     setFileData((prevData) => [
       ...prevData,
       {
-        id: Date.now(),
-        file: originFileObj!,
-        title: originFileObj!.name.replace(/\.[^/.]+$/, ""), // Remove file extension
+        id: `${uniqueIdCounter++}-${file.name}`, // use a combination of a counter and unique string
+        file: file,
+        title: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
         pageCount: pdfDoc.getPageCount(),
       },
     ]);
   };
 
-  const handleDocxUpload: UploadProps['onChange'] = async ({ file }) => {
-    if (file.status !== 'done') return;
-    const { originFileObj } = file;
+  const handleDocxUpload = (file: File) => {
     const reader = new FileReader();
     reader.onload = function(e) {
       setTemplateBuffer(e.target?.result as ArrayBuffer);
     };
-    reader.readAsArrayBuffer(originFileObj!);
-    setDocxTemplate(originFileObj!);
+    reader.readAsArrayBuffer(file);
+    setDocxTemplate(file);
   };
 
   const handleTitleChange = (id: number, value: string) => {
@@ -232,70 +233,84 @@ const App: React.FC = () => {
     setTocTitle(event.target.value);
   };
 
+  const columns = [
+    {
+      title: '标题', // Title
+      dataIndex: 'title',
+      key: 'title',
+      render: (text, record) => (
+        <Input value={text} onChange={(e) => handleTitleChange(record.id, e.target.value)} />
+      ),
+    },
+    {
+      title: '页数', // Page Count
+      dataIndex: 'pageCount',
+      key: 'pageCount',
+    },
+    {
+      title: '动作', // Actions
+      key: 'actions',
+      render: (_, record) => (
+        <div>
+          <Button icon={<ArrowUpOutlined />} onClick={() => handleMoveUp(record.id)} />
+          <Button icon={<ArrowDownOutlined />} onClick={() => handleMoveDown(record.id)} />
+          <Button type="primary" icon={<DeleteOutlined />} danger onClick={() => handleDelete(record.id)} />
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
-      <Title level={2} style={{ textAlign: 'center', marginBottom: '2rem' }}>PDF Merger and Catalog Generator</Title>
-      
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
-        <Upload accept='.pdf' onChange={handlePdfUpload} multiple>
-          <Button icon={<UploadOutlined />}>Upload PDFs</Button>
-        </Upload>
-        {fileData.length > 0 && <Text type="secondary">{fileData.length} file(s) selected</Text>}
-
-        <Upload accept=".docx" onChange={handleDocxUpload} style={{ marginBottom: '1rem' }}>
-          <Button icon={<UploadOutlined />}>Upload DOCX Template</Button>
-        </Upload>
-        {docxTemplate && <Text type="secondary">Template selected: {docxTemplate.name}</Text>}
-
-        <Table
-          dataSource={fileData}
-          pagination={false}
-          rowKey="id"
-          columns={[
-            { title: 'Title', dataIndex: 'title', render: (text: string, record: FileData) => <Input value={text} onChange={(e) => handleTitleChange(record.id, e.target.value)} /> },
-            { title: 'Pages', dataIndex: 'pageCount' },
-            { title: 'Actions', render: (_, record: FileData) => (
-              <Space>
-                <Button icon={<ArrowUpOutlined />} onClick={() => handleMoveUp(record.id)} />
-                <Button icon={<ArrowDownOutlined />} onClick={() => handleMoveDown(record.id)} />
-                <Button icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
-              </Space>
-            ) }
-          ]}
-        />
-
-        <Row gutter={[16, 16]}>
-          <Col span={12}>
-            <Select value={pageNumberPosition} onChange={(value) => setPageNumberPosition(value as any)} style={{ width: '100%' }}>
-              <Option value="none">No page number</Option>
-              <Option value="left">Left</Option>
-              <Option value="right">Right</Option>
-              <Option value="outside">Outside</Option>
-              <Option value="inside">Inside</Option>
-            </Select>
-          </Col>
-          <Col span={12}>
-            <Checkbox checked={insertEmptyPages} onChange={(e) => setInsertEmptyPages(e.target.checked)}>Insert empty page after odd page count PDFs</Checkbox>
-          </Col>
-        </Row>
-
-        <Checkbox checked={needContentPage} onChange={(e) => setNeedContentPage(e.target.checked)}>Generate content page</Checkbox>
-
-        {needContentPage && (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Button onClick={handleGenerateContentPage}>Generate Content Page DOCX</Button>
-            <Input value={tocTitle} onChange={handleTocTitleChange} placeholder="Custom Table of Contents Title" />
-            <Upload accept=".pdf" onChange={handlePdfUpload}>
-              <Button icon={<UploadOutlined />}>Choose Converted Content Page PDF</Button>
-            </Upload>
-          </Space>
-        )}
-
-        <Button onClick={handleSubmit} disabled={isLoading} type="primary" block>
-          {isLoading ? <Spin size="small" /> : 'Generate and Download Final PDF'}
-        </Button>
-      </Space>
-    </div>
+    <ConfigProvider>
+      <Layout>
+        <Content style={{ padding: '50px', backgroundColor: '#f0f2f5', minHeight: '280px' }}>
+          <Form layout="vertical">
+            <Form.Item label="上传 PDFs">
+              <Upload
+                multiple
+                accept=".pdf"
+                customRequest={({ file, onSuccess }) => { 
+                  handlePdfUpload([file as File]);
+                  onSuccess?.("ok");
+                }}
+                showUploadList={false}
+              >
+                <Button icon={<UploadOutlined />} type="primary">选择 PDF 文件</Button>
+              </Upload>
+            </Form.Item>
+            <Form.Item label="上传 DOCX 模板">
+              <Upload accept=".docx" customRequest={({ file, onSuccess }) => { handleDocxUpload(file as File); onSuccess?.("ok"); }} showUploadList={false}>
+                <Button icon={<UploadOutlined />}>选择 DOCX 文件</Button>
+              </Upload>
+            </Form.Item>
+            <Table dataSource={fileData} columns={columns} rowKey="id" pagination={false} />
+            <Form.Item label="页码位置">
+              <Select value={pageNumberPosition} onChange={(value) => setPageNumberPosition(value as any)}>
+                <Option value="none">无页码</Option>
+                <Option value="left">左侧</Option>
+                <Option value="right">右侧</Option>
+                <Option value="outside">外侧</Option>
+                <Option value="inside">内侧</Option>
+              </Select>
+            </Form.Item>
+            <Form.Item>
+              <Checkbox checked={needContentPage} onChange={(e) => setNeedContentPage(e.target.checked)}>生成目录页</Checkbox>
+            </Form.Item>
+            <Form.Item>
+              <Checkbox checked={insertEmptyPages} onChange={(e) => setInsertEmptyPages(e.target.checked)}>在页数为奇数的 PDF 后插入空白页</Checkbox>
+            </Form.Item>
+            <Form.Item label="自定义目录标题">
+              <Input value={tocTitle} onChange={(e) => setTocTitle(e.target.value)} />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" onClick={handleSubmit} disabled={isLoading}>
+                {isLoading ? <Spin size="small" /> : '生成并下载最终 PDF'}
+              </Button>
+            </Form.Item>
+          </Form>
+        </Content>
+      </Layout>
+    </ConfigProvider>
   );
 };
 
