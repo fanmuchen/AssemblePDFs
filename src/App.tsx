@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
@@ -13,10 +13,13 @@ import {
   TextInput,
   Button,
   Spinner,
+  IconButton,
 } from '@primer/react';
+import { DataTable } from '@primer/react/experimental';
+import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@primer/octicons-react';
 
 const StyledBox = styled(Box)`
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 2rem;
 `;
@@ -38,17 +41,32 @@ const FileLabel = styled.label`
   }
 `;
 
+interface FileData {
+  id: number;
+  file: File;
+  title: string;
+  pageCount: number;
+}
+
 const App: React.FC = () => {
-  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
+  const [fileData, setFileData] = useState<FileData[]>([]);
   const [docxTemplate, setDocxTemplate] = useState<File | null>(null);
   const [pageNumberPosition, setPageNumberPosition] = useState<'left' | 'right' | 'outside' | 'inside'>('right');
-  const [catalogEntries, setCatalogEntries] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handlePdfUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
-      setPdfFiles(Array.from(event.target.files));
-      setCatalogEntries(Array.from(event.target.files).map(file => file.name));
+      const files = Array.from(event.target.files);
+      const newFileData = await Promise.all(files.map(async (file, index) => {
+        const pdfDoc = await PDFDocument.load(await file.arrayBuffer());
+        return {
+          id: Date.now() + index,
+          file,
+          title: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
+          pageCount: pdfDoc.getPageCount(),
+        };
+      }));
+      setFileData(prevData => [...prevData, ...newFileData]);
     }
   };
 
@@ -58,17 +76,43 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCatalogEntryChange = (index: number, value: string) => {
-    const newEntries = [...catalogEntries];
-    newEntries[index] = value;
-    setCatalogEntries(newEntries);
+  const handleTitleChange = (id: number, value: string) => {
+    setFileData(prevData =>
+      prevData.map(item =>
+        item.id === id ? { ...item, title: value } : item
+      )
+    );
+  };
+
+  const handleDelete = (id: number) => {
+    setFileData(prevData => prevData.filter(item => item.id !== id));
+  };
+
+  const handleMoveUp = (index: number) => {
+    if (index > 0) {
+      setFileData(prevData => {
+        const newData = [...prevData];
+        [newData[index - 1], newData[index]] = [newData[index], newData[index - 1]];
+        return newData;
+      });
+    }
+  };
+
+  const handleMoveDown = (index: number) => {
+    if (index < fileData.length - 1) {
+      setFileData(prevData => {
+        const newData = [...prevData];
+        [newData[index], newData[index + 1]] = [newData[index + 1], newData[index]];
+        return newData;
+      });
+    }
   };
 
   const mergePDFs = async () => {
     const mergedPdf = await PDFDocument.create();
 
-    for (const pdfFile of pdfFiles) {
-      const pdfBytes = await pdfFile.arrayBuffer();
+    for (const data of fileData) {
+      const pdfBytes = await data.file.arrayBuffer();
       const pdf = await PDFDocument.load(pdfBytes);
       const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
       copiedPages.forEach((page) => mergedPdf.addPage(page));
@@ -106,7 +150,7 @@ const App: React.FC = () => {
         y,
         size: fontSize,
         font,
-        color: PDFDocument.rgb(0, 0, 0),
+        color: rgb(0, 0, 0),
       });
     });
 
@@ -139,26 +183,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     try {
       const mergedPdf = await mergePDFs();
-      const catalog = await generateCatalog();
-
-      // Convert catalog to PDF
-      const catalogPdf = await PDFDocument.create();
-      const catalogPdfBytes = await catalogPdf.save();
-
-      // Merge catalog with the main PDF
-      const finalPdf = await PDFDocument.create();
-      const [catalogDoc, mainDoc] = await Promise.all([
-        PDFDocument.load(catalogPdfBytes),
-        PDFDocument.load(await mergedPdf.save()),
-      ]);
-
-      const copiedCatalogPages = await finalPdf.copyPages(catalogDoc, catalogDoc.getPageIndices());
-      const copiedMainPages = await finalPdf.copyPages(mainDoc, mainDoc.getPageIndices());
-
-      copiedCatalogPages.forEach((page) => finalPdf.addPage(page));
-      copiedMainPages.forEach((page) => finalPdf.addPage(page));
-
-      const pdfBytes = await finalPdf.save();
+      const pdfBytes = await mergedPdf.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       saveAs(blob, 'merged_document_with_catalog.pdf');
       setIsLoading(false);
@@ -173,27 +198,68 @@ const App: React.FC = () => {
     <StyledBox>
       <Heading mb={4}>PDF Merger and Catalog Generator</Heading>
 
-      <Box mb={4}>
-        <Text fontWeight="bold" mb={2}>Upload PDFs</Text>
-        <FileLabel>
-          Choose PDF Files
-          <FileInput type="file" multiple accept=".pdf" onChange={handlePdfUpload} />
-        </FileLabel>
-        {pdfFiles.length > 0 && (
-          <Text mt={2}>{pdfFiles.length} file(s) selected</Text>
-        )}
+      <Box mb={4} display="flex" flexDirection="row" justifyContent="space-between">
+        <Box width="48%">
+          <Text fontWeight="bold" mb={2}>Upload PDFs</Text>
+          <FileLabel>
+            Choose PDF Files
+            <FileInput type="file" multiple accept=".pdf" onChange={handlePdfUpload} />
+          </FileLabel>
+          {fileData.length > 0 && (
+            <Text mt={2}>{fileData.length} file(s) selected</Text>
+          )}
+        </Box>
+
+        <Box width="48%">
+          <Text fontWeight="bold" mb={2}>Upload DOCX Template</Text>
+          <FileLabel>
+            Choose DOCX Template
+            <FileInput type="file" accept=".docx" onChange={handleDocxUpload} />
+          </FileLabel>
+          {docxTemplate && (
+            <Text mt={2}>{docxTemplate.name} selected</Text>
+          )}
+        </Box>
       </Box>
 
-      <Box mb={4}>
-        <Text fontWeight="bold" mb={2}>Upload DOCX Template</Text>
-        <FileLabel>
-          Choose DOCX Template
-          <FileInput type="file" accept=".docx" onChange={handleDocxUpload} />
-        </FileLabel>
-        {docxTemplate && (
-          <Text mt={2}>{docxTemplate.name} selected</Text>
-        )}
-      </Box>
+      {fileData.length > 0 && (
+        <Box mb={4}>
+          <DataTable
+            aria-labelledby="uploaded-files"
+            data={fileData}
+            columns={[
+              {
+                header: 'Title',
+                field: 'title',
+                width: 'grow',
+                renderCell: (row) => (
+                  <TextInput
+                    value={row.title}
+                    onChange={(e) => handleTitleChange(row.id, e.target.value)}
+                  />
+                ),
+              },
+              {
+                header: 'Pages',
+                field: 'pageCount',
+                width: 100,
+              },
+              {
+                header: 'Actions',
+                field: 'id',
+                width: 150,
+                renderCell: (row, index) => (
+                  <Box display="flex" justifyContent="space-between">
+                    <IconButton icon={ChevronUpIcon} aria-label="Move Up" onClick={() => handleMoveUp(index)} disabled={index === 0} />
+                    <IconButton icon={ChevronDownIcon} aria-label="Move Down" onClick={() => handleMoveDown(index)} disabled={index === fileData.length - 1} />
+                    <IconButton icon={TrashIcon} aria-label="Delete" onClick={() => handleDelete(row.id)} />
+                  </Box>
+                ),
+              },
+            ]}
+          />
+        </Box>
+      )}
 
       <FormControl mb={4}>
         <FormControl.Label>Page Number Position</FormControl.Label>
@@ -204,18 +270,6 @@ const App: React.FC = () => {
           <Select.Option value="inside">Inside</Select.Option>
         </Select>
       </FormControl>
-
-      <Box mb={4}>
-        <Text fontWeight="bold" mb={2}>Catalog Entries</Text>
-        {catalogEntries.map((entry, index) => (
-          <TextInput
-            key={index}
-            value={entry}
-            onChange={(e) => handleCatalogEntryChange(index, e.target.value)}
-            mb={2}
-          />
-        ))}
-      </Box>
 
       <Button onClick={handleSubmit} disabled={isLoading}>
         {isLoading ? <Spinner size="small" /> : 'Generate and Download'}
