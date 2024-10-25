@@ -51,8 +51,12 @@ interface FileData {
 const App: React.FC = () => {
   const [fileData, setFileData] = useState<FileData[]>([]);
   const [docxTemplate, setDocxTemplate] = useState<File | null>(null);
-  const [pageNumberPosition, setPageNumberPosition] = useState<'left' | 'right' | 'outside' | 'inside'>('right');
+  const [needContentPage, setNeedContentPage] = useState(true);
+  const [pageNumberPosition, setPageNumberPosition] = useState<'left' | 'right' | 'outside' | 'inside' | 'none'>('outside');
   const [isLoading, setIsLoading] = useState(false);
+  const [insertEmptyPages, setInsertEmptyPages] = useState(true);
+  const [templateBuffer, setTemplateBuffer] = useState<ArrayBuffer | null>(null);
+  const [tocTitle, setTocTitle] = useState('Table of Contents');
 
   const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -71,8 +75,19 @@ const App: React.FC = () => {
   };
 
   const handleDocxUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      setDocxTemplate(event.target.files[0]);
+    const file = event.target.files ? event.target.files[0] : null;
+    if (file?.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+      setDocxTemplate(file);
+
+      // Added code to set templateBuffer
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        setTemplateBuffer(e.target?.result as ArrayBuffer);
+      };
+      reader.readAsArrayBuffer(file);
+
+    } else {
+      alert("Please upload a valid DOCX file.");
     }
   };
 
@@ -120,11 +135,18 @@ const App: React.FC = () => {
       const pdf = await PDFDocument.load(pdfBytes);
       const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
       copiedPages.forEach((page) => mergedPdf.addPage(page));
+
+      // Insert an empty page if the PDF has an odd number of pages and insertEmptyPages is true
+      if (insertEmptyPages && copiedPages.length % 2 !== 0) {
+        const emptyPage = mergedPdf.addPage([pdf.getPage(0).getSize().width, pdf.getPage(0).getSize().height]);
+      }
     }
 
     const font = await mergedPdf.embedFont('Helvetica');
 
     mergedPdf.getPages().forEach((page, index) => {
+      if (pageNumberPosition === 'none') return;
+
       const { width, height } = page.getSize();
       const fontSize = 12;
       const pageNumber = `${index + 1}`;
@@ -166,6 +188,12 @@ const App: React.FC = () => {
       throw new Error('No DOCX template uploaded');
     }
 
+    // Prepare catalog entries from fileData
+    const catalogEntries = fileData.map((file, index) => ({
+      title: file.title,
+      page: index + 1 // Assuming sequential numbering
+    }));
+
     const templateContent = await docxTemplate.arrayBuffer();
     const zip = new PizZip(templateContent);
     const doc = new Docxtemplater(zip, {
@@ -173,7 +201,7 @@ const App: React.FC = () => {
       linebreaks: true,
     });
 
-    doc.render({ entries: catalogEntries });
+    doc.render({ entries: catalogEntries }); // Use catalogEntries here
 
     const generatedDoc = doc.getZip().generate({
       type: 'blob',
@@ -198,32 +226,88 @@ const App: React.FC = () => {
     }
   };
 
+  const handleTemplateUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        setTemplateBuffer(e.target?.result as ArrayBuffer);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
+  const handleGenerateContentPage = async () => {
+    if(!templateBuffer) {
+      alert('Template buffer not loaded. Please upload a valid DOCX file.');
+      return;
+    }
+
+    try {
+      const zip = new PizZip(templateBuffer);
+      const doc = new Docxtemplater(zip, { paragraphLoop: true });
+
+      // Calculate page numbers taking into account empty pages
+      let currentPageNumber = 1;
+      const catalogEntries = fileData.map((file, index) => {
+        const entry = { title: file.title, page: currentPageNumber };
+        currentPageNumber += file.pageCount;
+        if (insertEmptyPages && file.pageCount % 2 !== 0) {
+          currentPageNumber++; // Adding an empty page if odd number of pages
+        }
+        return entry;
+      });
+
+      const data = {
+        title: tocTitle,
+        entries: catalogEntries
+      };
+
+      doc.render(data);
+
+      const blob = doc.getZip().generate({
+        type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
+
+      saveAs(blob, 'generated_document.docx');
+    } catch (error) {
+      console.error("Error generating content page:", error);
+    }
+  };
+
+  const handleTocTitleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setTocTitle(event.target.value);
+  };
+
   return (
     <StyledBox>
-      <Heading mb={4}>PDF Merger and Catalog Generator</Heading>
+      <Heading mb={4}>PDF 合并与目录生成器</Heading> {/* PDF Merger and Catalog Generator */}
 
-      <Box mb={4} display="flex" flexDirection="row" justifyContent="space-between">
-        <Box width="48%">
-          <Text fontWeight="bold" mb={2}>Upload PDFs</Text>
-          <FileLabel>
-            Choose PDF Files
-            <FileInput type="file" multiple accept=".pdf" onChange={handlePdfUpload} />
-          </FileLabel>
-          {fileData.length > 0 && (
-            <Text mt={2}>{fileData.length} file(s) selected</Text>
-          )}
-        </Box>
+      <Box mb={4}>
+        <Text fontWeight="bold" mb={2}>
+          上传 PDFs <span style={{ color: 'red' }}>*</span> {/* Upload PDFs */}
+        </Text>
+        <FileLabel>
+          选择 PDF 文件 {/* Choose PDF Files */}
+          <FileInput type="file" multiple accept=".pdf" onChange={handlePdfUpload} />
+        </FileLabel>
+        {fileData.length > 0 && (
+          <Text mt={2}>{fileData.length} 个文件已选择</Text> // 确保注释没有多余的符号 {file(s) selected}
+        )}
+      </Box>
 
-        <Box width="48%">
-          <Text fontWeight="bold" mb={2}>Upload DOCX Template</Text>
-          <FileLabel>
-            Choose DOCX Template
-            <FileInput type="file" accept=".docx" onChange={handleDocxUpload} />
-          </FileLabel>
-          {docxTemplate && (
-            <Text mt={2}>{docxTemplate.name} selected</Text>
-          )}
-        </Box>
+      <Box mb={4}>
+        <Text fontWeight="bold" mb={2}>
+          上传 DOCX 模板 {/* Upload DOCX Template */}
+        </Text>
+        <FileLabel>
+          选择 DOCX 文件 {/* Choose DOCX File */}
+          <FileInput type="file" accept=".docx" onChange={handleDocxUpload} />
+        </FileLabel>
+        {docxTemplate && (
+          <Text mt={2}>模板已选择: {docxTemplate.name}</Text> // Display message when template is chosen
+        )}
       </Box>
 
       {fileData.length > 0 && (
@@ -233,7 +317,7 @@ const App: React.FC = () => {
             data={fileData}
             columns={[
               {
-                header: 'Title',
+                header: '标题', // 标题 represents "Title"
                 field: 'title',
                 width: 'grow',
                 renderCell: (row) => (
@@ -244,19 +328,19 @@ const App: React.FC = () => {
                 ),
               },
               {
-                header: 'Pages',
+                header: '页数', // Pages
                 field: 'pageCount',
                 width: 100,
               },
               {
-                header: 'Actions',
+                header: '动作', // Actions
                 field: 'id',
                 width: 150,
                 renderCell: (row) => (
                   <Box display="flex" justifyContent="space-between">
-                    <IconButton icon={ChevronUpIcon} aria-label="Move Up" onClick={() => handleMoveUp(row.id)} />
-                    <IconButton icon={ChevronDownIcon} aria-label="Move Down" onClick={() => handleMoveDown(row.id)} />
-                    <IconButton icon={TrashIcon} aria-label="Delete" onClick={() => handleDelete(row.id)} />
+                    <IconButton icon={ChevronUpIcon} aria-label="上移" onClick={() => handleMoveUp(row.id)} /> {/* Move Up */}
+                    <IconButton icon={ChevronDownIcon} aria-label="下移" onClick={() => handleMoveDown(row.id)} /> {/* Move Down */}
+                    <IconButton icon={TrashIcon} aria-label="删除" onClick={() => handleDelete(row.id)} /> {/* Delete */}
                   </Box>
                 ),
               },
@@ -266,17 +350,67 @@ const App: React.FC = () => {
       )}
 
       <FormControl mb={4}>
-        <FormControl.Label>Page Number Position</FormControl.Label>
+        <FormControl.Label>页码位置</FormControl.Label> {/* Page Number Position */}
         <Select value={pageNumberPosition} onChange={(e) => setPageNumberPosition(e.target.value as any)}>
-          <Select.Option value="left">Left</Select.Option>
-          <Select.Option value="right">Right</Select.Option>
-          <Select.Option value="outside">Outside</Select.Option>
-          <Select.Option value="inside">Inside</Select.Option>
+          <Select.Option value="none">无页码</Select.Option> {/* No page number - 6. Move to first option */}
+          <Select.Option value="left">左</Select.Option> {/* Left */}
+          <Select.Option value="right">右</Select.Option> {/* Right */}
+          <Select.Option value="outside">外侧</Select.Option> {/* Outside */}
+          <Select.Option value="inside">内侧</Select.Option> {/* Inside */}
         </Select>
       </FormControl>
 
+      <FormControl mb={4}>
+        <FormControl.Label>
+          <input
+            type="checkbox"
+            checked={needContentPage}
+            onChange={(e) => setNeedContentPage(e.target.checked)}
+          />
+          {' '}生成目录页 {/* Generate content page */}
+        </FormControl.Label>
+      </FormControl>
+
+      {needContentPage && (
+        <>
+          <Button onClick={handleGenerateContentPage}>
+            生成目录页 DOCX {/* Generate Content Page DOCX */}
+          </Button>
+
+          <Box mt={4} mb={4}>
+            <Text fontWeight="bold" mb={2}>
+              将下载的目录页 DOCX 转换为 PDF 后，在此处上传 PDF：{/* Instructions: How to handle content page */}
+            </Text>
+            <FileLabel>
+              选择转换后的目录页 PDF {/* Choose Converted Content Page PDF */}
+              <FileInput type="file" accept=".pdf" onChange={handlePdfUpload} />
+            </FileLabel>
+          </Box>
+        </>
+      )}
+
+      <FormControl mb={4}>
+        <FormControl.Label>
+          <input
+            type="checkbox"
+            checked={insertEmptyPages}
+            onChange={(e) => setInsertEmptyPages(e.target.checked)}
+          />
+          {' '}在页数为奇数的 PDF 后插入空白页 {/* Insert empty page after PDFs with odd page numbers */}
+        </FormControl.Label>
+      </FormControl>
+
+      {fileData.length > 0 && (
+        <FormControl mb={4}>
+          <FormControl.Label>
+            自定义目录标题 {/* Custom Table of Contents Title */}
+          </FormControl.Label>
+          <TextInput value={tocTitle} onChange={handleTocTitleChange} />
+        </FormControl>
+      )}
+
       <Button onClick={handleSubmit} disabled={isLoading}>
-        {isLoading ? <Spinner size="small" /> : 'Generate and Download'}
+        {isLoading ? <Spinner size="small" /> : '生成并下载最终 PDF'} {/* Generate and Download Final PDF */}
       </Button>
     </StyledBox>
   );
