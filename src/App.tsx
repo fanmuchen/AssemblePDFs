@@ -353,8 +353,8 @@ const App: React.FC = () => {
         <FormControl.Label>页码位置</FormControl.Label> {/* Page Number Position */}
         <Select value={pageNumberPosition} onChange={(e) => setPageNumberPosition(e.target.value as any)}>
           <Select.Option value="none">无页码</Select.Option> {/* No page number - 6. Move to first option */}
-          <Select.Option value="left">左</Select.Option> {/* Left */}
-          <Select.Option value="right">右</Select.Option> {/* Right */}
+          <Select.Option value="left">左侧</Select.Option> {/* Left */}
+          <Select.Option value="right">右侧</Select.Option> {/* Right */}
           <Select.Option value="outside">外侧</Select.Option> {/* Outside */}
           <Select.Option value="inside">内侧</Select.Option> {/* Inside */}
         </Select>
