@@ -3,10 +3,10 @@ import { PDFDocument, rgb } from 'pdf-lib';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
-import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, ConfigProvider } from 'antd';
+import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, ConfigProvider, theme } from 'antd';
 import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
-const { Content } = Layout;
+const { Header, Content, Footer } = Layout;
 const { Option } = Select;
 
 interface FileData {
@@ -18,15 +18,24 @@ interface FileData {
 
 let uniqueIdCounter = 0; // initialize a counter at a module level
 
+const items = new Array(3).fill(null).map((_, index) => ({
+  key: String(index + 1),
+  label: `nav ${index + 1}`,
+}));
+
 const App: React.FC = () => {
   const [fileData, setFileData] = useState<FileData[]>([]);
-  const [docxTemplate, setDocxTemplate] = useState<File | null>(null);
-  const [needContentPage, setNeedContentPage] = useState(true);
-  const [pageNumberPosition, setPageNumberPosition] = useState<'left' | 'right' | 'outside' | 'inside' | 'none'>('outside');
+  const [pageNumberPosition, setPageNumberPosition] = useState<'left' | 'right' | 'outside' | 'inside'>('outside');
   const [isLoading, setIsLoading] = useState(false);
   const [insertEmptyPages, setInsertEmptyPages] = useState(true);
   const [templateBuffer, setTemplateBuffer] = useState<ArrayBuffer | null>(null);
-  const [tocTitle, setTocTitle] = useState('Table of Contents');
+  const [tocTitle, setTocTitle] = useState('材料汇编');
+  // 添加新的 state
+  const [addPageNumbers, setAddPageNumbers] = useState(false);
+
+  const {
+    token: { colorBgContainer, borderRadiusLG },
+  } = theme.useToken();
 
   const handlePdfUpload = async (files: File[]) => {
     if (files.length === 0) return;
@@ -44,15 +53,6 @@ const App: React.FC = () => {
         pageCount: pdfDoc.getPageCount(),
       },
     ]);
-  };
-
-  const handleDocxUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      setTemplateBuffer(e.target?.result as ArrayBuffer);
-    };
-    reader.readAsArrayBuffer(file);
-    setDocxTemplate(file);
   };
 
   const handleTitleChange = (id: number, value: string) => {
@@ -106,49 +106,50 @@ const App: React.FC = () => {
       }
     }
 
-    const font = await mergedPdf.embedFont('Helvetica');
+    // 只在选择添加页码时才添加页码
+    if (addPageNumbers) {
+      const font = await mergedPdf.embedFont('Helvetica');
 
-    mergedPdf.getPages().forEach((page, index) => {
-      if (pageNumberPosition === 'none') return;
+      mergedPdf.getPages().forEach((page, index) => {
+        const { width, height } = page.getSize();
+        const fontSize = 12;
+        const pageNumber = `${index + 1}`;
 
-      const { width, height } = page.getSize();
-      const fontSize = 12;
-      const pageNumber = `${index + 1}`;
+        let x, y;
+        switch (pageNumberPosition) {
+          case 'left':
+            x = 50;
+            y = 30;
+            break;
+          case 'right':
+            x = width - 50;
+            y = 30;
+            break;
+          case 'outside':
+            x = index % 2 === 0 ? width - 50 : 50;
+            y = 30;
+            break;
+          case 'inside':
+            x = index % 2 === 0 ? 50 : width - 50;
+            y = 30;
+            break;
+        }
 
-      let x, y;
-      switch (pageNumberPosition) {
-        case 'left':
-          x = 50;
-          y = 30;
-          break;
-        case 'right':
-          x = width - 50;
-          y = 30;
-          break;
-        case 'outside':
-          x = index % 2 === 0 ? width - 50 : 50;
-          y = 30;
-          break;
-        case 'inside':
-          x = index % 2 === 0 ? 50 : width - 50;
-          y = 30;
-          break;
-      }
-
-      page.drawText(pageNumber, {
-        x,
-        y,
-        size: fontSize,
-        font,
-        color: rgb(0, 0, 0),
+        page.drawText(pageNumber, {
+          x,
+          y,
+          size: fontSize,
+          font,
+          color: rgb(0, 0, 0),
+        });
       });
-    });
+    }
 
     return mergedPdf;
   };
 
   const generateCatalog = async () => {
-    if (!docxTemplate) {
+    if (!templateBuffer) {
       throw new Error('No DOCX template uploaded');
     }
 
@@ -158,8 +159,7 @@ const App: React.FC = () => {
       page: index + 1 // Assuming sequential numbering
     }));
 
-    const templateContent = await docxTemplate.arrayBuffer();
-    const zip = new PizZip(templateContent);
+    const zip = new PizZip(templateBuffer);
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
@@ -191,7 +191,7 @@ const App: React.FC = () => {
   };
 
   const handleGenerateContentPage = async () => {
-    if(!templateBuffer) {
+    if (!templateBuffer) {
       alert('Template buffer not loaded. Please upload a valid DOCX file.');
       return;
     }
@@ -260,57 +260,86 @@ const App: React.FC = () => {
     },
   ];
 
+  // Load the DOCX template from the public directory
+  const loadDocxTemplate = async () => {
+    const response = await fetch('/content-template.docx');
+    const arrayBuffer = await response.arrayBuffer();
+    setTemplateBuffer(arrayBuffer);
+  };
+
+  // Call loadDocxTemplate when the component mounts
+  React.useEffect(() => {
+    loadDocxTemplate();
+  }, []);
+
   return (
-    <ConfigProvider>
+    // <ConfigProvider>
       <Layout>
-        <Content style={{ padding: '50px', backgroundColor: '#f0f2f5', minHeight: '280px' }}>
-          <Form layout="vertical">
-            <Form.Item label="上传 PDFs">
-              <Upload
-                multiple
-                accept=".pdf"
-                customRequest={({ file, onSuccess }) => { 
-                  handlePdfUpload([file as File]);
-                  onSuccess?.("ok");
-                }}
-                showUploadList={false}
-              >
-                <Button icon={<UploadOutlined />} type="primary">选择 PDF 文件</Button>
-              </Upload>
-            </Form.Item>
-            <Form.Item label="上传 DOCX 模板">
-              <Upload accept=".docx" customRequest={({ file, onSuccess }) => { handleDocxUpload(file as File); onSuccess?.("ok"); }} showUploadList={false}>
-                <Button icon={<UploadOutlined />}>选择 DOCX 文件</Button>
-              </Upload>
-            </Form.Item>
-            <Table dataSource={fileData} columns={columns} rowKey="id" pagination={false} />
-            <Form.Item label="页码位置">
-              <Select value={pageNumberPosition} onChange={(value) => setPageNumberPosition(value as any)}>
-                <Option value="none">无页码</Option>
-                <Option value="left">左侧</Option>
-                <Option value="right">右侧</Option>
-                <Option value="outside">外侧</Option>
-                <Option value="inside">内侧</Option>
-              </Select>
-            </Form.Item>
-            <Form.Item>
-              <Checkbox checked={needContentPage} onChange={(e) => setNeedContentPage(e.target.checked)}>生成目录页</Checkbox>
-            </Form.Item>
-            <Form.Item>
-              <Checkbox checked={insertEmptyPages} onChange={(e) => setInsertEmptyPages(e.target.checked)}>在页数为奇数的 PDF 后插入空白页</Checkbox>
-            </Form.Item>
-            <Form.Item label="自定义目录标题">
-              <Input value={tocTitle} onChange={(e) => setTocTitle(e.target.value)} />
-            </Form.Item>
-            <Form.Item>
-              <Button type="primary" onClick={handleSubmit} disabled={isLoading}>
-                {isLoading ? <Spin size="small" /> : '生成并下载最终 PDF'}
-              </Button>
-            </Form.Item>
-          </Form>
+        <Content style={{ padding: '24px 24px'}}>
+          <div
+            style={{
+              padding: 24,
+              background: colorBgContainer,
+              borderRadius: borderRadiusLG,
+              maxWidth: '100%', // Ensures it doesn't exceed the viewport width
+              margin: '0 auto', // Centers the content
+            }}
+          >
+            <Form layout="vertical">
+              <Form.Item label="上传 PDFs">
+                <Upload
+                  multiple
+                  accept=".pdf"
+                  customRequest={({ file, onSuccess }) => { 
+                    handlePdfUpload([file as File]);
+                    onSuccess?.("ok");
+                  }}
+                  showUploadList={false}
+                >
+                  <Button icon={<UploadOutlined />} type="primary">选择 PDF 文件</Button>
+                </Upload>
+                <div>你选定了{fileData.length}个文件</div> {/* Added instruction */}
+              </Form.Item>
+              <Table dataSource={fileData} columns={columns} rowKey="id" pagination={false} />
+              <Form.Item>
+                <Checkbox checked={insertEmptyPages} onChange={(e) => setInsertEmptyPages(e.target.checked)}>在页数为奇数的 PDF 后插入空白页</Checkbox>
+              </Form.Item>
+              <Form.Item>
+                <Checkbox checked={addPageNumbers} onChange={(e) => setAddPageNumbers(e.target.checked)}>
+                  添加页码
+                </Checkbox>
+              </Form.Item>
+              {addPageNumbers && (
+                <Form.Item label="页码位置">
+                  <Select value={pageNumberPosition} onChange={(value) => setPageNumberPosition(value as any)}>
+                    <Option value="left">左侧</Option>
+                    <Option value="right">右侧</Option>
+                    <Option value="outside">外侧</Option>
+                    <Option value="inside">内侧</Option>
+                  </Select>
+                </Form.Item>
+              )}
+              <Form.Item>
+                <Button type="primary" onClick={handleSubmit} disabled={isLoading}>
+                  {isLoading ? <Spin size="small" /> : '生成并下载合并的PDF'}
+                </Button>
+              </Form.Item>
+              <Form.Item label="自定义目录标题">
+                <Input value={tocTitle} onChange={(e) => setTocTitle(e.target.value)} />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" onClick={handleGenerateContentPage}>
+                  生成并下载目录页
+                </Button>
+              </Form.Item>
+            </Form>
+          </div>
         </Content>
+        <Footer style={{ textAlign: 'center' }}>
+          Muchen Fan ©{new Date().getFullYear()} Created by FMC
+        </Footer>
       </Layout>
-    </ConfigProvider>
+    // </ConfigProvider>
   );
 };
 
