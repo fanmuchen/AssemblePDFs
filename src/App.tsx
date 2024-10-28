@@ -3,7 +3,7 @@ import { PDFDocument, rgb } from 'pdf-lib';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
-import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, ConfigProvider, theme } from 'antd';
+import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, ConfigProvider, theme, Divider } from 'antd';
 import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
 const { Header, Content, Footer } = Layout;
@@ -239,7 +239,11 @@ const App: React.FC = () => {
       dataIndex: 'title',
       key: 'title',
       render: (text, record) => (
-        <Input value={text} onChange={(e) => handleTitleChange(record.id, e.target.value)} />
+        <Input.TextArea 
+          value={text} 
+          onChange={(e) => handleTitleChange(record.id, e.target.value)}
+          autoSize={{ minRows: 2, maxRows: 6 }}
+        />
       ),
     },
     {
@@ -273,9 +277,15 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    // <ConfigProvider>
       <Layout>
-        <Content style={{ padding: '24px 24px'}}>
+        <Content
+          style={{
+            padding: '24px 24px',
+            maxWidth: 1280,
+            margin: '0 auto', // Centers the content
+            width: '100%',    // Ensures the content can expand to 100% of available space
+          }}
+        >
           <div
             style={{
               padding: 24,
@@ -285,8 +295,9 @@ const App: React.FC = () => {
               margin: '0 auto', // Centers the content
             }}
           >
+            <h2>PDF 编排工具</h2>
             <Form layout="vertical">
-              <Form.Item label="上传 PDFs">
+              <Form.Item label="上传 PDF 文件">
                 <Upload
                   multiple
                   accept=".pdf"
@@ -300,7 +311,8 @@ const App: React.FC = () => {
                 </Upload>
                 <div>你选定了{fileData.length}个文件</div> {/* Added instruction */}
               </Form.Item>
-              <Table dataSource={fileData} columns={columns} rowKey="id" pagination={false} />
+              <Table dataSource={fileData} columns={columns} rowKey="id" pagination={false}/>
+              <Divider>生成合并的PDF</Divider>
               <Form.Item>
                 <Checkbox checked={insertEmptyPages} onChange={(e) => setInsertEmptyPages(e.target.checked)}>在页数为奇数的 PDF 后插入空白页</Checkbox>
               </Form.Item>
@@ -324,6 +336,7 @@ const App: React.FC = () => {
                   {isLoading ? <Spin size="small" /> : '生成并下载合并的PDF'}
                 </Button>
               </Form.Item>
+              <Divider>生成DOCX目录页</Divider>
               <Form.Item label="自定义目录标题">
                 <Input value={tocTitle} onChange={(e) => setTocTitle(e.target.value)} />
               </Form.Item>
@@ -339,7 +352,6 @@ const App: React.FC = () => {
           Muchen Fan ©{new Date().getFullYear()} Created by FMC
         </Footer>
       </Layout>
-    // </ConfigProvider>
   );
 };
 
