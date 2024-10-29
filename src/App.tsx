@@ -4,10 +4,11 @@ import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
 import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, ConfigProvider, theme, Divider } from 'antd';
-import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
+import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, InboxOutlined } from '@ant-design/icons';
 
 const { Header, Content, Footer } = Layout;
 const { Option } = Select;
+const { Dragger } = Upload;
 
 interface FileData {
   id: number;
@@ -181,7 +182,7 @@ const App: React.FC = () => {
       const mergedPdf = await mergePDFs();
       const pdfBytes = await mergedPdf.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      saveAs(blob, 'merged_document_with_catalog.pdf');
+      saveAs(blob, 'merged_document.pdf');
       setIsLoading(false);
     } catch (error) {
       console.error('Error generating document:', error);
@@ -276,12 +277,39 @@ const App: React.FC = () => {
     loadDocxTemplate();
   }, []);
 
+  const uploadProps = {
+    name: 'file',
+    multiple: true,
+showUploadList: false,
+
+    accept: '.pdf',
+    customRequest: async ({ file, onSuccess, onError }) => {
+      try {
+        await handlePdfUpload([file as File]);
+        onSuccess?.("ok");
+      } catch (error) {
+        onError?.(error);
+      }
+    },
+    onChange(info) {
+      const { status } = info.file;
+      if (status === 'done') {
+        message.success(`${info.file.name} file uploaded successfully.`);
+      } else if (status === 'error') {
+        message.error(`${info.file.name} file upload failed.`);
+      }
+    },
+    onDrop(e) {
+      console.log('Dropped files', e.dataTransfer.files);
+    },
+  };
+
   return (
       <Layout>
         <Content
           style={{
             padding: '24px 24px',
-            maxWidth: 1280,
+            maxWidth: 1024,
             margin: '0 auto', // Centers the content
             width: '100%',    // Ensures the content can expand to 100% of available space
           }}
@@ -298,17 +326,15 @@ const App: React.FC = () => {
             <h2>PDF 编排工具</h2>
             <Form layout="vertical">
               <Form.Item label="上传 PDF 文件">
-                <Upload
-                  multiple
-                  accept=".pdf"
-                  customRequest={({ file, onSuccess }) => { 
-                    handlePdfUpload([file as File]);
-                    onSuccess?.("ok");
-                  }}
-                  showUploadList={false}
-                >
-                  <Button icon={<UploadOutlined />} type="primary">选择 PDF 文件</Button>
-                </Upload>
+                <Dragger {...uploadProps}>
+                  <p className="ant-upload-drag-icon">
+                    <InboxOutlined />
+                  </p>
+                  <p className="ant-upload-text">Click or drag file to this area to upload</p>
+                  <p className="ant-upload-hint">
+                    Support for a single or bulk upload. Strictly prohibited from uploading company data or other banned files.
+                  </p>
+                </Dragger>
                 <div>你选定了{fileData.length}个文件</div> {/* Added instruction */}
               </Form.Item>
               <Table dataSource={fileData} columns={columns} rowKey="id" pagination={false}/>
