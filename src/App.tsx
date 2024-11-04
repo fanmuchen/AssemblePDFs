@@ -5,6 +5,15 @@ import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
 import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, ConfigProvider, theme, Divider } from 'antd';
 import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, InboxOutlined } from '@ant-design/icons';
+import { Document, Page } from 'react-pdf';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+
+import { pdfjs } from 'react-pdf';
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
 
 const { Header, Content, Footer } = Layout;
 const { Option } = Select;
@@ -33,6 +42,8 @@ const App: React.FC = () => {
   const [tocTitle, setTocTitle] = useState('材料汇编');
   // 添加新的 state
   const [addPageNumbers, setAddPageNumbers] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [numPages, setNumPages] = useState<number>(0);
 
   const {
     token: { colorBgContainer, borderRadiusLG },
@@ -263,6 +274,20 @@ const App: React.FC = () => {
         </div>
       ),
     },
+    {
+      title: 'PDF预览', // PDF Preview
+      key: 'pdfPreview',
+      // 使用render函数定义如何渲染列的内容
+      render: (record) => (
+        <Document
+          file={record.file}
+          loading={<Spin />}
+          renderMode="svg" // 提示: 使用'svg'模式可能获得更好的渲染效果
+        >
+          <Page pageNumber={1} height={100}/> 
+        </Document>
+      ),
+    },
   ];
 
   // Load the DOCX template from the public directory
@@ -277,15 +302,23 @@ const App: React.FC = () => {
     loadDocxTemplate();
   }, []);
 
+  const onFileChange = async (file: File) => {
+    setSelectedFile(file); // Update the selected file for preview
+    await handlePdfUpload([file]); // Upload file data as before
+  };
+
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages); // Set the number of pages in the document
+  };
+
   const uploadProps = {
     name: 'file',
     multiple: true,
-showUploadList: false,
-
+    showUploadList: false,
     accept: '.pdf',
     customRequest: async ({ file, onSuccess, onError }) => {
       try {
-        await handlePdfUpload([file as File]);
+        await onFileChange(file as File); // Preview file before uploading
         onSuccess?.("ok");
       } catch (error) {
         onError?.(error);
@@ -294,9 +327,9 @@ showUploadList: false,
     onChange(info) {
       const { status } = info.file;
       if (status === 'done') {
-        message.success(`${info.file.name} file uploaded successfully.`);
+        message.success(`${info.file.name} 文件上传成功。`);
       } else if (status === 'error') {
-        message.error(`${info.file.name} file upload failed.`);
+        message.error(`${info.file.name} 文件上传失败。`);
       }
     },
     onDrop(e) {
@@ -323,20 +356,21 @@ showUploadList: false,
               margin: '0 auto', // Centers the content
             }}
           >
-            <h2>PDF 编排工具</h2>
+            <h2>PDF 编排合并工具</h2>
             <Form layout="vertical">
               <Form.Item label="上传 PDF 文件">
                 <Dragger {...uploadProps}>
                   <p className="ant-upload-drag-icon">
                     <InboxOutlined />
                   </p>
-                  <p className="ant-upload-text">Click or drag file to this area to upload</p>
+                  <p className="ant-upload-text">点击或将文件拖拽到此区域上传</p>
                   <p className="ant-upload-hint">
-                    Support for a single or bulk upload. Strictly prohibited from uploading company data or other banned files.
+                    支持单个或批量上传。严禁上传国家秘密或其他禁止联网处理的文件。
                   </p>
                 </Dragger>
-                <div>你选定了{fileData.length}个文件</div> {/* Added instruction */}
+                <div>你选定了{fileData.length}个文件</div>
               </Form.Item>
+              
               <Table dataSource={fileData} columns={columns} rowKey="id" pagination={false}/>
               <Divider>生成合并的PDF</Divider>
               <Form.Item>
@@ -359,7 +393,7 @@ showUploadList: false,
               )}
               <Form.Item>
                 <Button type="primary" onClick={handleSubmit} disabled={isLoading}>
-                  {isLoading ? <Spin size="small" /> : '生成并下载合并的PDF'}
+                  {isLoading ? <Spin size="small" /> : '生成并下载合并的 PDF'}
                 </Button>
               </Form.Item>
               <Divider>生成DOCX目录页</Divider>
