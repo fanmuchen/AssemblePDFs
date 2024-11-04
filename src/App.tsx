@@ -309,7 +309,7 @@ showUploadList: false,
         <Content
           style={{
             padding: '24px 24px',
-            maxWidth: 1024,
+            maxWidth: 800,
             margin: '0 auto', // Centers the content
             width: '100%',    // Ensures the content can expand to 100% of available space
           }}
