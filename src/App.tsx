@@ -11,8 +11,8 @@ import 'react-pdf/dist/Page/TextLayer.css';
 
 import { pdfjs } from 'react-pdf';
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  '/pdf.worker.min.mjs',
-  window.location.origin
+  'assets/pdf.worker.min.mjs',
+  import.meta.url
 ).toString();
 
 const { Content, Footer } = Layout;

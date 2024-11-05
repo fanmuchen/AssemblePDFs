@@ -5,15 +5,9 @@ set -a
 source .env
 set +a
 
-# Compile TypeScript
-echo "Compiling TypeScript..."
-npm run build
-
-# Check if TypeScript compilation was successful
-if [ $? -ne 0 ]; then
-  echo "TypeScript compilation failed. Exiting..."
-  exit 1
-fi
+# Clean local dist directory before building
+echo "Cleaning local dist directory..."
+rm -rf dist
 
 # Build the project with Vite
 echo "Building the project with Vite..."
@@ -22,6 +16,16 @@ npm run build
 # Check if build was successful
 if [ $? -ne 0 ]; then
   echo "Build failed. Exiting..."
+  exit 1
+fi
+
+# Clean remote directory before uploading
+echo "Cleaning remote directory..."
+ssh -i $SSH_KEY_PATH $REMOTE_USER@$REMOTE_HOST "rm -rf $REMOTE_DIR/*"
+
+# Check if remote directory clean was successful
+if [ $? -ne 0 ]; then
+  echo "Remote directory clean failed. Exiting..."
   exit 1
 fi
 
