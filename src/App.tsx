@@ -3,19 +3,19 @@ import { PDFDocument, rgb } from 'pdf-lib';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
-import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, ConfigProvider, theme, Divider } from 'antd';
-import { UploadOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, InboxOutlined } from '@ant-design/icons';
+import { Layout, Form, Input, Button, Upload, Checkbox, Select, Spin, message, Table, theme, Divider } from 'antd';
+import { DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, InboxOutlined } from '@ant-design/icons';
 import { Document, Page } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 import { pdfjs } from 'react-pdf';
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
+  '/pdf.worker.min.mjs',
+  window.location.origin
 ).toString();
 
-const { Header, Content, Footer } = Layout;
+const { Content, Footer } = Layout;
 const { Option } = Select;
 const { Dragger } = Upload;
 
@@ -28,11 +28,6 @@ interface FileData {
 
 let uniqueIdCounter = 0; // initialize a counter at a module level
 
-const items = new Array(3).fill(null).map((_, index) => ({
-  key: String(index + 1),
-  label: `nav ${index + 1}`,
-}));
-
 const App: React.FC = () => {
   const [fileData, setFileData] = useState<FileData[]>([]);
   const [pageNumberPosition, setPageNumberPosition] = useState<'left' | 'right' | 'outside' | 'inside'>('outside');
@@ -40,10 +35,7 @@ const App: React.FC = () => {
   const [insertEmptyPages, setInsertEmptyPages] = useState(true);
   const [templateBuffer, setTemplateBuffer] = useState<ArrayBuffer | null>(null);
   const [tocTitle, setTocTitle] = useState('材料汇编');
-  // 添加新的 state
   const [addPageNumbers, setAddPageNumbers] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [numPages, setNumPages] = useState<number>(0);
 
   const {
     token: { colorBgContainer, borderRadiusLG },
@@ -59,7 +51,7 @@ const App: React.FC = () => {
     setFileData((prevData) => [
       ...prevData,
       {
-        id: `${uniqueIdCounter++}-${file.name}`, // use a combination of a counter and unique string
+        id: uniqueIdCounter++, // use a counter for unique ID
         file: file,
         title: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
         pageCount: pdfDoc.getPageCount(),
@@ -114,16 +106,15 @@ const App: React.FC = () => {
 
       // Insert an empty page if the PDF has an odd number of pages and insertEmptyPages is true
       if (insertEmptyPages && copiedPages.length % 2 !== 0) {
-        const emptyPage = mergedPdf.addPage([pdf.getPage(0).getSize().width, pdf.getPage(0).getSize().height]);
+        mergedPdf.addPage([pdf.getPage(0).getSize().width, pdf.getPage(0).getSize().height]);
       }
     }
 
-    // 只在选择添加页码时才添加页码
     if (addPageNumbers) {
       const font = await mergedPdf.embedFont('Helvetica');
 
       mergedPdf.getPages().forEach((page, index) => {
-        const { width, height } = page.getSize();
+        const { width } = page.getSize();
         const fontSize = 12;
         const pageNumber = `${index + 1}`;
 
@@ -160,33 +151,6 @@ const App: React.FC = () => {
     return mergedPdf;
   };
 
-  const generateCatalog = async () => {
-    if (!templateBuffer) {
-      throw new Error('No DOCX template uploaded');
-    }
-
-    // Prepare catalog entries from fileData
-    const catalogEntries = fileData.map((file, index) => ({
-      title: file.title,
-      page: index + 1 // Assuming sequential numbering
-    }));
-
-    const zip = new PizZip(templateBuffer);
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-    });
-
-    doc.render({ entries: catalogEntries }); // Use catalogEntries here
-
-    const generatedDoc = doc.getZip().generate({
-      type: 'blob',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    });
-
-    return generatedDoc;
-  };
-
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
@@ -212,13 +176,12 @@ const App: React.FC = () => {
       const zip = new PizZip(templateBuffer);
       const doc = new Docxtemplater(zip, { paragraphLoop: true });
 
-      // Calculate page numbers taking into account empty pages
       let currentPageNumber = 1;
-      const catalogEntries = fileData.map((file, index) => {
+      const catalogEntries = fileData.map((file) => {
         const entry = { title: file.title, page: currentPageNumber };
         currentPageNumber += file.pageCount;
         if (insertEmptyPages && file.pageCount % 2 !== 0) {
-          currentPageNumber++; // Adding an empty page if odd number of pages
+          currentPageNumber++;
         }
         return entry;
       });
@@ -241,16 +204,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleTocTitleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setTocTitle(event.target.value);
-  };
-
   const columns = [
     {
       title: '标题', // Title
       dataIndex: 'title',
       key: 'title',
-      render: (text, record) => (
+      render: (text: string, record: FileData) => (
         <Input.TextArea 
           value={text} 
           onChange={(e) => handleTitleChange(record.id, e.target.value)}
@@ -266,7 +225,7 @@ const App: React.FC = () => {
     {
       title: '动作', // Actions
       key: 'actions',
-      render: (_, record) => (
+      render: (_: any, record: FileData) => (
         <div>
           <Button icon={<ArrowUpOutlined />} onClick={() => handleMoveUp(record.id)} />
           <Button icon={<ArrowDownOutlined />} onClick={() => handleMoveDown(record.id)} />
@@ -277,12 +236,10 @@ const App: React.FC = () => {
     {
       title: 'PDF预览', // PDF Preview
       key: 'pdfPreview',
-      // 使用render函数定义如何渲染列的内容
-      render: (record) => (
+      render: (record: FileData) => (
         <Document
           file={record.file}
           loading={<Spin />}
-          renderMode="svg" // 提示: 使用'svg'模式可能获得更好的渲染效果
         >
           <Page pageNumber={1} height={100}/> 
         </Document>
@@ -290,25 +247,18 @@ const App: React.FC = () => {
     },
   ];
 
-  // Load the DOCX template from the public directory
   const loadDocxTemplate = async () => {
     const response = await fetch('/content-template.docx');
     const arrayBuffer = await response.arrayBuffer();
     setTemplateBuffer(arrayBuffer);
   };
 
-  // Call loadDocxTemplate when the component mounts
   React.useEffect(() => {
     loadDocxTemplate();
   }, []);
 
   const onFileChange = async (file: File) => {
-    setSelectedFile(file); // Update the selected file for preview
-    await handlePdfUpload([file]); // Upload file data as before
-  };
-
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages); // Set the number of pages in the document
+    await handlePdfUpload([file]);
   };
 
   const uploadProps = {
@@ -316,15 +266,16 @@ const App: React.FC = () => {
     multiple: true,
     showUploadList: false,
     accept: '.pdf',
-    customRequest: async ({ file, onSuccess, onError }) => {
+    customRequest: async (options: any) => {
+      const { file, onSuccess, onError } = options;
       try {
-        await onFileChange(file as File); // Preview file before uploading
+        await onFileChange(file as File); // Cast file to File type
         onSuccess?.("ok");
       } catch (error) {
         onError?.(error);
       }
     },
-    onChange(info) {
+    onChange(info: any) {
       const { status } = info.file;
       if (status === 'done') {
         message.success(`${info.file.name} 文件上传成功。`);
@@ -332,7 +283,7 @@ const App: React.FC = () => {
         message.error(`${info.file.name} 文件上传失败。`);
       }
     },
-    onDrop(e) {
+    onDrop(e: React.DragEvent<HTMLDivElement>) {
       console.log('Dropped files', e.dataTransfer.files);
     },
   };
@@ -343,8 +294,8 @@ const App: React.FC = () => {
           style={{
             padding: '24px 24px',
             maxWidth: 800,
-            margin: '0 auto', // Centers the content
-            width: '100%',    // Ensures the content can expand to 100% of available space
+            margin: '0 auto',
+            width: '100%',
           }}
         >
           <div
@@ -352,8 +303,8 @@ const App: React.FC = () => {
               padding: 24,
               background: colorBgContainer,
               borderRadius: borderRadiusLG,
-              maxWidth: '100%', // Ensures it doesn't exceed the viewport width
-              margin: '0 auto', // Centers the content
+              maxWidth: '100%',
+              margin: '0 auto',
             }}
           >
             <h2>PDF 编排合并工具</h2>
