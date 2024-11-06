@@ -296,6 +296,7 @@ const App: React.FC = () => {
             maxWidth: 800,
             margin: '0 auto',
             width: '100%',
+            minHeight: 'calc(100vh - 100px)',
           }}
         >
           <div
@@ -303,11 +304,10 @@ const App: React.FC = () => {
               padding: 24,
               background: colorBgContainer,
               borderRadius: borderRadiusLG,
-              maxWidth: '100%',
               margin: '0 auto',
             }}
           >
-            <h2>PDF 编排合并工具</h2>
+            <h2 style={{ textAlign: 'center', marginBottom: '16px' }}>PDF 编排合并工具</h2>
             <Form layout="vertical">
               <Form.Item label="上传 PDF 文件">
                 <Dragger {...uploadProps}>
@@ -361,6 +361,8 @@ const App: React.FC = () => {
         </Content>
         <Footer style={{ textAlign: 'center' }}>
           Muchen Fan ©{new Date().getFullYear()} Created by FMC
+          <br/><br/>
+          沪ICP备2024055006号-1
         </Footer>
       </Layout>
   );
