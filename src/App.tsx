@@ -8,6 +8,7 @@ import { DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, InboxOutlined } fro
 import { Document, Page } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import ToolkitSidebar from 'fmcnav';
 
 import { pdfjs } from 'react-pdf';
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -290,6 +291,8 @@ const App: React.FC = () => {
 
   return (
       <Layout>
+        <ToolkitSidebar/>
+        <Layout>
         <Content
           style={{
             padding: '24px 24px',
@@ -298,7 +301,7 @@ const App: React.FC = () => {
             width: '100%',
             minHeight: 'calc(100vh - 100px)',
           }}
-        >
+        > 
           <div
             style={{
               padding: 24,
@@ -364,6 +367,7 @@ const App: React.FC = () => {
           <br/><br/>
           沪ICP备2024055006号-1
         </Footer>
+        </Layout>
       </Layout>
   );
 };
