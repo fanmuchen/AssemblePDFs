@@ -19,6 +19,10 @@ fi
 echo "Cleaning local dist directory..."
 rm -rf dist
 
+# Set PUBLIC_URL for the build process
+echo "Setting the base URL for the project..."
+export BASE_URL=$VITE_APP_BASE_URL
+
 # Build the project with Vite
 echo "Building the project with Vite..."
 npm run build

@@ -20,6 +20,8 @@ const { Content, Footer } = Layout;
 const { Option } = Select;
 const { Dragger } = Upload;
 
+// const baseUrl = import.meta.env.VITE_APP_BASE_URL || '/';
+
 interface FileData {
   id: number;
   file: File;
@@ -291,7 +293,10 @@ const App: React.FC = () => {
 
   return (
       <Layout>
-        <ToolkitSidebar/>
+        <ToolkitSidebar 
+          logo={`${import.meta.env.BASE_URL}logo.svg`}
+          selectedKeys={['assemblepdfs']}
+        />
         <Layout>
         <Content
           style={{
